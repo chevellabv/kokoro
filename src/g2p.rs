@@ -434,6 +434,23 @@ pub fn g2p(text: &str, use_v11: bool) -> Result<String, G2PError> {
     result = result.replace("ɹˈən", "ɹˈʌn");
     result = result.replace(" ɹˈən", " ɹˈʌn");
 
+    // Fix "much" pronunciation: mˈətʃ → mˈʌtʃ
+    // The schwa (ə) makes it sound like "metch", but American English "much" uses "uh" (ʌ)
+    // Examples:
+    //   "much"      → "mˈətʃ" should be "mˈʌtʃ"
+    //   "too much"  → "mˈətʃ" should be "mˈʌtʃ"
+    result = result.replace("mˈətʃ", "mˈʌtʃ");
+    result = result.replace(" mˈətʃ", " mˈʌtʃ");
+
+    // Fix "good" pronunciation: ɡɪd → ɡʊd
+    // Wrong vowel: ɪ (as in "bit") instead of ʊ (as in "book")
+    // American English "good" uses the ʊ sound, same as "could/should/would"
+    // Examples:
+    //   "good"     → "ɡɪd" should be "ɡʊd"
+    //   "good job" → "ɡɪd" should be "ɡʊd"
+    result = result.replace("ɡɪd", "ɡʊd");
+    result = result.replace(" ɡɪd", " ɡʊd");
+
     // For other hw → w conversions that don't need vowel change
     if result.starts_with("hw") {
         result = format!("w{}", &result[2..]);
