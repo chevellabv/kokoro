@@ -407,17 +407,23 @@ pub fn g2p(text: &str, use_v11: bool) -> Result<String, G2PError> {
         };
     }
 
-    // Second pass: Fix any remaining "hw" → "w" (archaic to modern American English)
-    // This catches cases where individual words starting with hw were combined into a sentence
-    // Apply after all words are processed to ensure consistent pronunciation
+    // Second pass: Fix wh- word pronunciation for modern American English
+    // Strategy: Replace "hw" → "w" but also fix the vowel to distinguish from other w- words
     let mut result = result.trim().to_string();
 
-    // Fix "hw" at the start of the string
+    // Fix wh- question words: "hwˈə" → "wˈʌ" (use "uh" vowel instead of schwa)
+    // This makes "what" sound like "wuht" instead of "with"
+    // Examples:
+    //   "what"  → "hwˈət" → "wˈʌt" (not "wˈət" which sounds like "with")
+    //   "when"  → "hwˈɛn" → "wˈɛn" (this one is OK, different vowel already)
+    //   "where" → "hwˈɛɹ" → "wˈɛɹ" (this one is OK)
+    result = result.replace("hwˈə", "wˈʌ");  // Fix "what" specifically
+    result = result.replace(" hwˈə", " wˈʌ"); // At word boundaries
+
+    // For other hw → w that don't need vowel change
     if result.starts_with("hw") {
         result = format!("w{}", &result[2..]);
     }
-
-    // Fix " hw" (space before hw) - indicates start of a new word
     result = result.replace(" hw", " w");
 
     Ok(result)
