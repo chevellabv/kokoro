@@ -235,12 +235,11 @@ fn word2ipa_en(word: &str) -> Result<String, G2PError> {
         }
 
         // eSpeak includes stress/prosody markers as ASCII digits (0-9)
-        // These are not part of IPA phonemes and cause pronunciation issues
+        // v1.0 NOTE: Keep stress markers for better intonation!
+        // Stress markers provide crucial prosody information for natural speech
+        // v0.19 had issues with them, but v1.0 handles them correctly
         // Examples: "the" → "ðə2", "time" → "t2ˈaɪmɛ", "improvement" → "ˈɪmpɹəʊvɪmˌɛnt"
-        // Strip all ASCII digits from the result
-        let mut cleaned_result: String = result.chars()
-            .filter(|c| !c.is_ascii_digit())
-            .collect();
+        let mut cleaned_result = result.clone(); // Keep stress markers!
 
         // eSpeak also appends context words that should be stripped
         // Examples:
