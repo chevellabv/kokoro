@@ -407,7 +407,20 @@ pub fn g2p(text: &str, use_v11: bool) -> Result<String, G2PError> {
         };
     }
 
-    Ok(result.trim().to_string())
+    // Second pass: Fix any remaining "hw" → "w" (archaic to modern American English)
+    // This catches cases where individual words starting with hw were combined into a sentence
+    // Apply after all words are processed to ensure consistent pronunciation
+    let mut result = result.trim().to_string();
+
+    // Fix "hw" at the start of the string
+    if result.starts_with("hw") {
+        result = format!("w{}", &result[2..]);
+    }
+
+    // Fix " hw" (space before hw) - indicates start of a new word
+    result = result.replace(" hw", " w");
+
+    Ok(result)
 }
 
 #[cfg(test)]
