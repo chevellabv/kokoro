@@ -426,6 +426,14 @@ pub fn g2p(text: &str, use_v11: bool) -> Result<String, G2PError> {
     result = result.replace("wˈət", "wˈʌt");
     result = result.replace(" wˈət", " wˈʌt");
 
+    // Fix "run" pronunciation: ɹˈən → ɹˈʌn
+    // The schwa (ə) makes it sound like "ren", but American English "run" uses "uh" (ʌ)
+    // Examples:
+    //   "run"         → "ɹˈən" should be "ɹˈʌn"
+    //   "another run" → "ɹˈən" should be "ɹˈʌn"
+    result = result.replace("ɹˈən", "ɹˈʌn");
+    result = result.replace(" ɹˈən", " ɹˈʌn");
+
     // For other hw → w conversions that don't need vowel change
     if result.starts_with("hw") {
         result = format!("w{}", &result[2..]);
