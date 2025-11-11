@@ -186,6 +186,21 @@ fn word2ipa_en(word: &str) -> Result<String, G2PError> {
         }
     }
 
+    // Handle common abbreviations before they get spelled out letter-by-letter
+    let abbreviation_phonemes = match word_lower.as_str() {
+        "ai" => Some("ˈeɪaɪ"),     // "ay-eye"
+        "ui" => Some("juːˈaɪ"),    // "you-eye"
+        "api" => Some("ˈeɪpiːˈaɪ"), // "ay-pee-eye"
+        "cpu" => Some("siːpiːjˈuː"), // "see-pee-you"
+        "gpu" => Some("dʒiːpiːjˈuː"), // "gee-pee-you"
+        "usb" => Some("juːˈɛsbiː"), // "you-ess-bee"
+        _ => None
+    };
+
+    if let Some(phonemes) = abbreviation_phonemes {
+        return Ok(phonemes.to_string());
+    }
+
     if word.chars().count() < 4 && word.chars().all(|c| c.is_ascii_uppercase()) {
         return Ok(letters_to_ipa(word));
     }
@@ -197,14 +212,28 @@ fn word2ipa_en(word: &str) -> Result<String, G2PError> {
 
     unsafe {
         static INIT: Once = Once::new();
+
         INIT.call_once(|| {
+            // Try to load en_dict from espeak-ng-data directory if ESPEAK_NG_DATA_DIR is set
+            // This provides better quality phonemes matching sherpa-onnx behavior
+            if let Ok(data_dir) = std::env::var("ESPEAK_NG_DATA_DIR") {
+                let dict_path = std::path::Path::new(&data_dir).join("en_dict");
+                if let Ok(data) = std::fs::read(&dict_path) {
+                    // Leak the data to keep it alive for the lifetime of the program
+                    let leaked_data: &'static [u8] = Box::leak(data.into_boxed_slice());
+                    Initialize(leaked_data.as_ptr() as _);
+                    return;
+                }
+            }
+
+            // Fall back to embedded espeak.dict
             static DATA: &[u8] = include_bytes!("../dict/espeak.dict");
             Initialize(DATA.as_ptr() as _);
         });
 
         let word_lower = word.to_lowercase();
-        let word = CString::new(word_lower)?.into_raw() as *const c_char;
-        let res = TextToPhonemes(word);
+        let word_cstr = CString::new(word_lower.clone())?.into_raw() as *const c_char;
+        let res = TextToPhonemes(word_cstr);
         let mut result = CStr::from_ptr(res).to_str()?.to_string();
 
         // eSpeak sometimes includes lookahead context after ||
@@ -214,7 +243,48 @@ fn word2ipa_en(word: &str) -> Result<String, G2PError> {
             result = result[..pos].to_string();
         }
 
-        Ok(result)
+        // eSpeak includes stress/prosody markers as ASCII digits (0-9)
+        // These are not part of IPA phonemes and cause pronunciation issues
+        // Examples: "the" → "ðə2", "time" → "t2ˈaɪmɛ", "improvement" → "ˈɪmpɹəʊvɪmˌɛnt"
+        // Strip all ASCII digits from the result
+        let mut cleaned_result: String = result.chars()
+            .filter(|c| !c.is_ascii_digit())
+            .collect();
+
+        // eSpeak also appends context words that should be stripped
+        // Examples:
+        // "this" → "ðˈɪswˌɒn" (includes "one")
+        // "will" → "wˈɪltə" (includes "to")
+        // "fastest" → "fˈastɛsənt" (includes "escent/ascent")
+        // "for" → "fˈɔːwɒn" (includes "one")
+        // "that" → "ðɐthɐzbˈɪn" (includes "has been")
+        // "should" → "ʃˈʊdhavtə" (includes "have" + "to")
+        // "we" → "wiːʃˈal" (includes "shall")
+        // "adjust" → "ɐdʒˈʌsənt" (includes "ənt")
+        // These are common context suffixes that need removal
+        // Ordered by length (longest first) to match greedily
+        let context_suffixes = [
+            "hɐzbˈɪn", // "has been"
+            "ɛsənt",   // "escent/ascent" (appears in superlatives like "fastest")
+            "ɔnðə",    // "on the"
+            "ʃˈal",    // "shall"
+            "wˌɒn",    // "one" (with stress)
+            "wɒn",     // "one" (without stress)
+            "ɪntʊ",    // "into" (when it's context)
+            "ənt",     // schwa + "nt" suffix (appears in adjust, etc.)
+            "hav",     // "have"
+            "tə",      // "to"
+            "ðə",      // "the"
+        ];
+
+        for suffix in &context_suffixes {
+            if cleaned_result.ends_with(suffix) && cleaned_result.len() > suffix.len() {
+                cleaned_result = cleaned_result[..cleaned_result.len() - suffix.len()].to_string();
+                break;
+            }
+        }
+
+        Ok(cleaned_result)
     }
 }
 
