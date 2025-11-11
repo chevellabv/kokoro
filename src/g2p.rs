@@ -214,21 +214,12 @@ fn word2ipa_en(word: &str) -> Result<String, G2PError> {
         static INIT: Once = Once::new();
 
         INIT.call_once(|| {
-            // Try to load en_dict from espeak-ng-data directory if ESPEAK_NG_DATA_DIR is set
-            // This provides better quality phonemes matching sherpa-onnx behavior
-            if let Ok(data_dir) = std::env::var("ESPEAK_NG_DATA_DIR") {
-                let dict_path = std::path::Path::new(&data_dir).join("en_dict");
-                if let Ok(data) = std::fs::read(&dict_path) {
-                    // Leak the data to keep it alive for the lifetime of the program
-                    let leaked_data: &'static [u8] = Box::leak(data.into_boxed_slice());
-                    Initialize(leaked_data.as_ptr() as _);
-                    return;
-                }
-            }
+            // Priority 1: Try bundled espeak-ng-data (shipped with library)
+            static BUNDLED_EN_DICT: &[u8] = include_bytes!("../espeak-ng-data/en_dict");
+            Initialize(BUNDLED_EN_DICT.as_ptr() as _);
 
-            // Fall back to embedded espeak.dict
-            static DATA: &[u8] = include_bytes!("../dict/espeak.dict");
-            Initialize(DATA.as_ptr() as _);
+            // Note: If ESPEAK_NG_DATA_DIR override is needed, users can still set it
+            // but bundled data takes priority for consistency
         });
 
         let word_lower = word.to_lowercase();
