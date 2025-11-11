@@ -411,16 +411,22 @@ pub fn g2p(text: &str, use_v11: bool) -> Result<String, G2PError> {
     // Strategy: Replace "hw" → "w" but also fix the vowel to distinguish from other w- words
     let mut result = result.trim().to_string();
 
-    // Fix wh- question words: "hwˈə" → "wˈʌ" (use "uh" vowel instead of schwa)
-    // This makes "what" sound like "wuht" instead of "with"
-    // Examples:
-    //   "what"  → "hwˈət" → "wˈʌt" (not "wˈət" which sounds like "with")
-    //   "when"  → "hwˈɛn" → "wˈɛn" (this one is OK, different vowel already)
-    //   "where" → "hwˈɛɹ" → "wˈɛɹ" (this one is OK)
-    result = result.replace("hwˈə", "wˈʌ");  // Fix "what" specifically
-    result = result.replace(" hwˈə", " wˈʌ"); // At word boundaries
+    // Fix "what" pronunciation: need to catch both "hwˈət" and "wˈət" variants
+    // eSpeak is inconsistent:
+    //   - Lowercase "what" → "hwˈət"
+    //   - Capitalized "What" → "wˈət" (no hw!)
+    // Both need to become "wˈʌt" (ʌ = "uh" vowel, distinguishes from "with" = "wˈɪθ")
 
-    // For other hw → w that don't need vowel change
+    // Fix "hwˈət" → "wˈʌt" (lowercase "what")
+    result = result.replace("hwˈət", "wˈʌt");
+    result = result.replace(" hwˈət", " wˈʌt");
+
+    // Fix "wˈət" → "wˈʌt" (capitalized "What" or in sentences)
+    // This is safe because English doesn't have other common words with "wˈət" phoneme
+    result = result.replace("wˈət", "wˈʌt");
+    result = result.replace(" wˈət", " wˈʌt");
+
+    // For other hw → w conversions that don't need vowel change
     if result.starts_with("hw") {
         result = format!("w{}", &result[2..]);
     }
