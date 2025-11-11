@@ -70,7 +70,7 @@ static ARPA_IPA_MAP: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::n
     map.insert("D", "d");
     map.insert("DH", "ð");
     map.insert("EH", "ɛ");
-    map.insert("ER", "ɝ");
+    map.insert("ER", "ɚ");  // Changed from ɝ to ɚ (ɝ not in v1.0 vocab)
     map.insert("EY", "eɪ");
     map.insert("F", "f");
     map.insert("G", "ɡ");
@@ -124,12 +124,13 @@ pub fn arpa_to_ipa(arpa: &str) -> Result<String, regex::Error> {
 
     let mut result = String::with_capacity(arpa.len() * 2);
     // 添加重音标记（支持三级重音）
-    result.push(match &caps[2] {
-        "1" => 'ˈ',
-        "2" => 'ˌ',
-        "3" => '˧', // 2025新增中级重音
-        _ => '\0',
-    });
+    // Only add stress markers when present (not for unstressed syllables)
+    match &caps[2] {
+        "1" => result.push('ˈ'),
+        "2" => result.push('ˌ'),
+        "3" => result.push('˧'), // 2025新增中级重音
+        _ => {}, // Don't add anything for unstressed syllables
+    }
 
     result.push_str(&phoneme);
 

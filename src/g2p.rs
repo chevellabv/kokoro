@@ -110,7 +110,25 @@ fn word2ipa_en(word: &str) -> Result<String, G2PError> {
         })
     }
 
-    let Some(rules) = get_cmudict()?.get(word) else {
+    // Lowercase the word for CMUDict lookup (CMUDict only has lowercase entries)
+    let word_lower = word.to_lowercase();
+
+    // Try compound word splitting for common prefixes if word not found
+    let Some(rules) = get_cmudict()?.get(&word_lower) else {
+        // Try splitting compound words with common prefixes
+        let prefixes = ["down", "up", "out", "under", "over", "in", "off"];
+        for prefix in prefixes {
+            if word_lower.starts_with(prefix) && word_lower.len() > prefix.len() {
+                let rest = &word_lower[prefix.len()..];
+                // Check if both parts exist in dictionary
+                if get_cmudict()?.get(prefix).is_some() && get_cmudict()?.get(rest).is_some() {
+                    // Recursively get phonemes for both parts
+                    let prefix_ipa = word2ipa_en(prefix)?;
+                    let rest_ipa = word2ipa_en(rest)?;
+                    return Ok(format!("{}{}", prefix_ipa, rest_ipa));
+                }
+            }
+        }
         return Ok(letters_to_ipa(word));
     };
     if rules.is_empty() {
@@ -133,6 +151,41 @@ fn word2ipa_en(word: &str) -> Result<String, G2PError> {
         sync::Once,
     };
 
+    // Handle common contractions that eSpeak pronounces incorrectly
+    let word_lower = word.to_lowercase();
+    let contraction_phonemes = match word_lower.as_str() {
+        "you're" | "youre" => Some("jɔːɹ"),     // Like "your", not "you re"
+        "they're" | "theyre" => Some("ðɛɹ"),    // Like "there"
+        "we're" | "were" => Some("wɪɹ"),        // Like "weer"
+        "you'll" | "youll" => Some("juːl"),     // "yool"
+        "i'll" | "ill" => Some("aɪl"),          // Be careful with "ill" (sick)
+        "he'll" | "hell" => Some("hiːl"),       // Be careful with "hell"
+        "she'll" | "shell" => Some("ʃiːl"),     // Be careful with "shell"
+        "we'll" | "well" => Some("wiːl"),       // Be careful with "well"
+        "they'll" | "theyll" => Some("ðeɪl"),   // "they'll"
+        "won't" | "wont" => Some("woʊnt"),      // "wohnt"
+        "can't" | "cant" => Some("kænt"),       // "kant"
+        "don't" | "dont" => Some("doʊnt"),      // "dohnt"
+        "doesn't" | "doesnt" => Some("dʌzənt"), // "duzzent"
+        "didn't" | "didnt" => Some("dɪdənt"),   // "diddent"
+        "wouldn't" | "wouldnt" => Some("wʊdənt"), // "woodent"
+        "shouldn't" | "shouldnt" => Some("ʃʊdənt"), // "shoodent"
+        "couldn't" | "couldnt" => Some("kʊdənt"), // "coodent"
+        "i'm" | "im" => Some("aɪm"),            // "ime"
+        "that's" | "thats" => Some("ðæts"),     // "thats"
+        "what's" | "whats" => Some("wʌts"),     // "whuts"
+        "it's" | "its" => Some("ɪts"),          // "its"
+        "let's" | "lets" => Some("lɛts"),       // "lets"
+        _ => None
+    };
+
+    if let Some(phonemes) = contraction_phonemes {
+        // Only use contraction if word actually has apostrophe or is known contraction
+        if word.contains('\'') || word.contains('\u{2019}') {
+            return Ok(phonemes.to_string());
+        }
+    }
+
     if word.chars().count() < 4 && word.chars().all(|c| c.is_ascii_uppercase()) {
         return Ok(letters_to_ipa(word));
     }
@@ -149,9 +202,19 @@ fn word2ipa_en(word: &str) -> Result<String, G2PError> {
             Initialize(DATA.as_ptr() as _);
         });
 
-        let word = CString::new(word.to_lowercase())?.into_raw() as *const c_char;
+        let word_lower = word.to_lowercase();
+        let word = CString::new(word_lower)?.into_raw() as *const c_char;
         let res = TextToPhonemes(word);
-        Ok(CStr::from_ptr(res).to_str()?.to_string())
+        let mut result = CStr::from_ptr(res).to_str()?.to_string();
+
+        // eSpeak sometimes includes lookahead context after ||
+        // e.g., "too" -> "tˈuː||mʌtʃ" which causes "much" to appear twice
+        // Strip everything after || to get only the current word's phonemes
+        if let Some(pos) = result.find("||") {
+            result = result[..pos].to_string();
+        }
+
+        Ok(result)
     }
 }
 
@@ -209,11 +272,14 @@ fn num_repr(text: &str) -> Result<String, G2PError> {
 }
 
 pub fn g2p(text: &str, use_v11: bool) -> Result<String, G2PError> {
-    let text = num_repr(&text)?;
+    // Only convert numbers to Chinese for v1.1 (Chinese model)
+    // v1.0 is English and should keep numbers as-is or spell them out
+    let text = if use_v11 { num_repr(&text)? } else { text.to_string() };
     let sentence_pattern = Regex::new(
-        r#"([\u4E00-\u9FFF]+)|([，。：·？、！《》（）【】〖〗〔〕“”‘’〈〉…—　]+)|([\u0000-\u00FF]+)+"#,
+        r#"([\u4E00-\u9FFF]+)|([，。：·？、！《》（）【】〖〗〔〕""''〈〉…—　]+)|([\u0000-\u00FF]+)+"#,
     )?;
-    let en_word_pattern = Regex::new("\\w+|\\W+")?;
+    // Keep apostrophes within words to handle contractions like "you're"
+    let en_word_pattern = Regex::new(r"[\w']+|[^\w']+")?;
     let jieba = jieba_rs::Jieba::new();
     let mut result = String::new();
     for i in sentence_pattern.captures_iter(&text) {
