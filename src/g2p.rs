@@ -451,6 +451,15 @@ pub fn g2p(text: &str, use_v11: bool) -> Result<String, G2PError> {
     result = result.replace("ɡɪd", "ɡʊd");
     result = result.replace(" ɡɪd", " ɡʊd");
 
+    // Fix "job" pronunciation in phrases: dʒˈoʊb → dʒˈɑb
+    // espeak changes vowel in phrases from ɑ (correct) to oʊ (wrong)
+    // Examples:
+    //   "job"       → "dʒˈɑb" (correct - stays as-is)
+    //   "good job"  → "dʒˈoʊb" should be "dʒˈɑb" (fixes "joub" to "job")
+    //   "great job" → "dʒˈoʊb" should be "dʒˈɑb"
+    result = result.replace("dʒˈoʊb", "dʒˈɑb");
+    result = result.replace(" dʒˈoʊb", " dʒˈɑb");
+
     // For other hw → w conversions that don't need vowel change
     if result.starts_with("hw") {
         result = format!("w{}", &result[2..]);
