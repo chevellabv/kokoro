@@ -274,6 +274,19 @@ fn word2ipa_en(word: &str) -> Result<String, G2PError> {
             }
         }
 
+        // Fix archaic "hw" pronunciation to modern American English "w"
+        // eSpeak uses "hw" for words like "what", "when", "where", "which", "why"
+        // Modern American English pronounces these with just "w" (not "hw")
+        // Examples:
+        //   "what" → "hwˈət" should be "wˈət"
+        //   "when" → "hwˈɛn" should be "wˈɛn"
+        //   "where" → "hwˈɛɹ" should be "wˈɛɹ"
+        //   "which" → "hwˈɪtʃ" should be "wˈɪtʃ"
+        //   "why" → "hwˈaɪ" should be "wˈaɪ"
+        if cleaned_result.starts_with("hw") {
+            cleaned_result = cleaned_result.replacen("hw", "w", 1);
+        }
+
         Ok(cleaned_result)
     }
 }
