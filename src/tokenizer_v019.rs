@@ -29,7 +29,7 @@ fn load_vocab_from_tokens(tokens_txt: &str) -> HashMap<char, u8> {
 }
 
 // Embed the tokens.txt file at compile time
-const TOKENS_V019: &str = include_str!("../../kokoro-en-v0_19 2/tokens.txt");
+const TOKENS_V019: &str = include_str!("../dict/v0_19/tokens.txt");
 
 static VOCAB_V019: LazyLock<HashMap<char, u8>> = LazyLock::new(|| {
     let vocab = load_vocab_from_tokens(TOKENS_V019);
